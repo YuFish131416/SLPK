@@ -1,6 +1,5 @@
 import gzip
 import json
-import math
 import struct
 import tempfile
 import os
@@ -11,6 +10,8 @@ from PIL import Image
 from sklearn.cluster import DBSCAN
 import shutil
 import draco
+import open3d as o3d
+from scipy.spatial.transform import Rotation
 
 
 def optimize_slpk_nodes(slpk_path, output_path,
@@ -181,12 +182,13 @@ def optimize_slpk_nodes(slpk_path, output_path,
                 clusters[cluster_id] = []
             clusters[cluster_id].append((node_id, node_data))
 
-        # 创建新节点
+        # 创建新节点 - 移出循环外
         nodes_to_remove = []
         new_nodes_count = 0
         merged_nodes_count = 0
         processed_nodes = 0
 
+        # 使用items()直接迭代
         for cluster_id, group in clusters.items():
             processed_nodes += len(group)
 
@@ -194,38 +196,36 @@ def optimize_slpk_nodes(slpk_path, output_path,
             if len(group) > 1 or estimate_vertex_count(group[0][1]) < min_points:
                 merged_nodes = [node_id for node_id, _ in group]
                 new_node_id = f"merged_{cluster_id}"
-                success = merge_i3s_nodes(temp_dir, merged_nodes, new_node_id, simplify_ratio)
+
+                # 优化2: 批量计算中心点
+                centers = [get_node_center(node_data) for _, node_data in group]
+                cluster_center = np.mean(centers, axis=0)
+
+                success = merge_i3s_nodes(temp_dir, merged_nodes, new_node_id,
+                                          simplify_ratio, cluster_center)
+
                 if success:
                     new_nodes_count += 1
                     merged_nodes_count += len(merged_nodes)
+                    nodes_to_remove.extend(merged_nodes)
             else:
                 # 大节点简化后保留
                 node_id, node_data = group[0]
-                success = simplify_i3s_node(temp_dir, node_id, simplify_ratio)
+                node_center = get_node_center(node_data)
+                success = simplify_i3s_node(temp_dir, node_id, simplify_ratio, node_center)
                 if success:
                     new_nodes_count += 1
 
-            if len(group) > 1 or estimate_vertex_count(group[0][1]) < min_points:
-                merged_nodes = [node_id for node_id, _ in group]
-                new_node_id = f"merged_{cluster_id}"
-                success = merge_i3s_nodes(temp_dir, merged_nodes, new_node_id, simplify_ratio)
-                if success:
-                    new_nodes_count += 1
-                    merged_nodes_count += len(merged_nodes)
-                    # 记录需要删除的节点
-                    nodes_to_remove.extend(merged_nodes)
-
-                # 删除已合并的原始节点
-            nodes_dir = os.path.join(temp_dir, "nodes")
-            for node_id in nodes_to_remove:
-                node_path = os.path.join(nodes_dir, node_id)
-                if os.path.exists(node_path):
-                    shutil.rmtree(node_path)
-
-            # 打印进度
-            if processed_nodes % 100 == 0:
+            # 批量删除节点（移出循环）
+            if processed_nodes % 100 == 0 or processed_nodes == len(node_bboxes):
                 print(f"已处理 {processed_nodes}/{len(node_bboxes)} 个节点")
 
+        # 批量删除节点（提高效率）
+        nodes_dir = os.path.join(temp_dir, "nodes")
+        for node_id in nodes_to_remove:
+            node_path = os.path.join(nodes_dir, node_id)
+            if os.path.exists(node_path):
+                shutil.rmtree(node_path)
 
         # 优化纹理
         print(f"优化纹理 (最大尺寸: {texture_max_size}px)...")
@@ -342,6 +342,28 @@ def repack_slpk(source_dir, output_path):
         return False
 
 
+def get_node_center(node_data):
+    """获取节点的中心点坐标（三维）"""
+    if 'obb' in node_data:
+        obb = node_data['obb']
+        if 'center' in obb and len(obb['center']) >= 3:
+            return np.array(obb['center'][:3])
+
+    if 'mbs' in node_data:
+        mbs = node_data['mbs']
+        if isinstance(mbs, list) and len(mbs) >= 4:
+            return np.array(mbs[:3])
+
+    if 'geometry' in node_data:
+        geom = node_data['geometry']
+        if 'bbox' in geom and len(geom['bbox']) >= 6:
+            minx, miny, minz, maxx, maxy, maxz = geom['bbox'][:6]
+            return np.array([(minx + maxx) / 2, (miny + maxy) / 2, (minz + maxz) / 2])
+
+    # 默认返回原点
+    return np.array([0, 0, 0])
+
+
 def estimate_vertex_count(node_data):
     """估算节点中的顶点数"""
     # 从几何资源中估算
@@ -361,7 +383,7 @@ def estimate_vertex_count(node_data):
     return 0
 
 
-def merge_i3s_nodes(temp_dir, node_ids, new_node_id, simplify_ratio):
+def merge_i3s_nodes(temp_dir, node_ids, new_node_id, simplify_ratio, common_center):
     """合并多个I3S节点为一个新节点"""
     try:
         nodes_dir = os.path.join(temp_dir, "nodes")
@@ -399,6 +421,14 @@ def merge_i3s_nodes(temp_dir, node_ids, new_node_id, simplify_ratio):
             "materialDefinitions": []
         }
 
+        # 创建新节点的OBB（定向边界框）
+        new_obb = {
+            "center": common_center.tolist(),
+            "halfSize": [10, 10, 10],  # 初始值，后续会更新
+            "quaternion": [0, 0, 0, 1]  # 无旋转
+        }
+        new_index_data["obb"] = new_obb
+
         for node_id in node_ids:
             node_dir = os.path.join(nodes_dir, node_id)
             index_path = os.path.join(node_dir, "3dNodeIndexDocument.json")
@@ -418,40 +448,37 @@ def merge_i3s_nodes(temp_dir, node_ids, new_node_id, simplify_ratio):
                     pass
 
             # 合并几何数据
+            # 获取当前节点的局部坐标系
+            node_center = get_node_center(node_data)
+
+            # 计算从节点局部坐标系到公共坐标系的变换
+            translation = node_center - common_center
+
+            # 合并几何数据（带坐标系转换）
             if 'geometryData' in node_data:
                 for geom in node_data['geometryData']:
-                    # 复制几何文件
                     geom_file = geom['resource']['href']
                     src_path = os.path.join(node_dir, geom_file)
-                    if os.path.exists(src_path):
-                        # 简化几何
-                        if simplify_ratio > 0:
-                            simplified = simplify_geometry_file(src_path, simplify_ratio)
-                            if simplified:
-                                # 保存简化后的几何
-                                new_geom_file = f"geometries/{geometry_index}.bin"
-                                dst_path = os.path.join(new_node_dir, new_geom_file)
-                                with open(dst_path, 'wb') as f_out:
-                                    f_out.write(simplified)
 
-                                # 更新几何资源
-                                new_geom_resource = {
-                                    "href": new_geom_file,
-                                    "vertexCount": geom['resource']['vertexCount']  # 估算
-                                }
-                                new_index_data['geometryData'].append({
-                                    "resource": new_geom_resource
-                                })
-                                geometry_index += 1
-                        else:
-                            # 直接复制
+                    if os.path.exists(src_path):
+                        # 读取并转换几何数据
+                        transformed_geom = transform_geometry_file(
+                            src_path,
+                            translation,
+                            simplify_ratio
+                        )
+
+                        if transformed_geom:
                             new_geom_file = f"geometries/{geometry_index}.bin"
                             dst_path = os.path.join(new_node_dir, new_geom_file)
-                            shutil.copy(src_path, dst_path)
+                            with open(dst_path, 'wb') as f_out:
+                                f_out.write(transformed_geom)
 
                             # 更新几何资源
-                            new_geom_resource = geom['resource'].copy()
-                            new_geom_resource['href'] = new_geom_file
+                            new_geom_resource = {
+                                "href": new_geom_file,
+                                "vertexCount": geom['resource']['vertexCount']  # 估算
+                            }
                             new_index_data['geometryData'].append({
                                 "resource": new_geom_resource
                             })
@@ -520,12 +547,110 @@ def merge_i3s_nodes(temp_dir, node_ids, new_node_id, simplify_ratio):
         return False
 
 
-def simplify_i3s_node(temp_dir, node_id, simplify_ratio):
-    """简化单个I3S节点"""
+def transform_geometry_file(file_path, translation, simplify_ratio=0):
+    """转换几何坐标系并简化（保留三维信息）"""
+    try:
+        with open(file_path, 'rb') as f:
+            data = f.read()
+
+        # 1. 解码几何数据
+        if data.startswith(b'DRAC'):
+            mesh = draco.decode(data)
+            vertices = np.array(mesh.points)
+            faces = np.array(mesh.faces).reshape(-1, 3) if mesh.faces else None
+        else:
+            # 尝试解析为I3S标准二进制格式
+            vertices, faces = parse_i3s_binary(data)
+
+        if vertices is None or len(vertices) == 0:
+            return None
+
+        # 2. 应用坐标系转换（三维平移）
+        vertices = vertices + translation
+
+        # 3. 三维感知的几何简化
+        if 0 < simplify_ratio < 1:
+            vertices, faces = simplify_mesh_3d(vertices, faces, simplify_ratio)
+
+        # 4. 重新编码为Draco格式
+        if faces is not None and len(faces) > 0:
+            # 三角形网格
+            encoded = draco.encode(vertices, faces=faces)
+        else:
+            # 点云
+            encoded = draco.encode(vertices, faces=None)
+
+        return encoded
+
+    except Exception as e:
+        print(f"几何转换失败: {str(e)}")
+        return None
+
+
+def parse_i3s_binary(data):
+    """解析I3S二进制格式（包含Z值）"""
+    try:
+        # I3S二进制格式参考：
+        # 头部：4字节特征数量 + 4字节顶点数量
+        # 顶点数据：每个顶点12字节（XYZ坐标） + 其他属性
+        feature_count = struct.unpack('<I', data[0:4])[0]
+        vertex_count = struct.unpack('<I', data[4:8])[0]
+
+        # 检查数据长度
+        expected_length = 8 + vertex_count * 12
+        if len(data) < expected_length:
+            return None, None
+
+        # 提取顶点
+        vertices = []
+        offset = 8
+        for _ in range(vertex_count):
+            x, y, z = struct.unpack('<fff', data[offset:offset + 12])
+            vertices.append([x, y, z])
+            offset += 12
+
+        # 转换为numpy数组
+        return np.array(vertices), None
+
+    finally:
+        return None, None
+
+
+def simplify_mesh_3d(vertices, faces, ratio):
+    """三维感知的网格简化（保留空间特征）"""
+    try:
+        # 创建Open3D网格对象
+        mesh = o3d.geometry.TriangleMesh()
+        mesh.vertices = o3d.utility.Vector3dVector(vertices)
+
+        if faces is not None:
+            mesh.triangles = o3d.utility.Vector3iVector(faces)
+
+        # 计算目标三角形数量
+        original_count = len(mesh.triangles) if mesh.has_triangles() else len(vertices)
+        target_count = max(1, int(original_count * (1 - ratio)))
+
+        # 使用Quadric Error Metrics简化
+        simplified_mesh = mesh.simplify_quadric_decimation(target_count)
+
+        # 获取简化后的顶点和面
+        simplified_vertices = np.asarray(simplified_mesh.vertices)
+        simplified_faces = np.asarray(simplified_mesh.triangles) if simplified_mesh.has_triangles() else None
+
+        return simplified_vertices, simplified_faces
+
+    except Exception as e:
+        print(f"三维网格简化失败: {str(e)}")
+        return vertices, faces
+
+
+def simplify_i3s_node(temp_dir, node_id, simplify_ratio, node_center):
+    """简化单个I3S节点（三维感知）"""
     try:
         nodes_dir = os.path.join(temp_dir, "nodes")
         node_dir = os.path.join(nodes_dir, node_id)
         index_path = os.path.join(node_dir, "3dNodeIndexDocument.json")
+        geometry_modified = False
 
         if not os.path.exists(index_path):
             return False
@@ -533,14 +658,27 @@ def simplify_i3s_node(temp_dir, node_id, simplify_ratio):
         with open(index_path, 'r') as f:
             node_data = json.load(f)
 
-        modified = False
+        # 处理几何数据
+        if 'geometryData' in node_data:
+            for geom in node_data['geometryData']:
+                geom_file = geom['resource']['href']
+                src_path = os.path.join(node_dir, geom_file)
 
-        # 保存修改后的节点索引文档
-        if modified:
-            with open(index_path, 'w') as f:
-                json.dump(node_data, f, indent=2)
+                if os.path.exists(src_path):
+                    # 简化几何（使用三维感知方法）
+                    simplified = transform_geometry_file(
+                        src_path,
+                        np.array([0, 0, 0]),  # 不转换位置
+                        simplify_ratio
+                    )
 
-        return modified
+                    if simplified:
+                        # 覆盖原始几何文件
+                        with open(src_path, 'wb') as f_out:
+                            f_out.write(simplified)
+                        geometry_modified = True
+
+        return geometry_modified
 
     except Exception as e:
         print(f"简化节点失败: {str(e)}")
