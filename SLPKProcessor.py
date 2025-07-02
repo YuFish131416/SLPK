@@ -208,7 +208,7 @@ class SLPKOptimizer(SLPKProcessor):
         print(f"最大保留深度: {max_retained_depth}")
 
         # 获取需要保留的节点（包括共享资源中引用的节点）
-        nodes_to_keep = self.get_nodes_to_keep(max_retained_depth+1)
+        nodes_to_keep = self.get_nodes_to_keep(max_retained_depth)
         nodes_to_delete = list(set(all_node_ids) - set(nodes_to_keep))
         print(f"保留的节点数: {len(nodes_to_keep)} 需要删除的节点数: {len(nodes_to_delete)}")
 
