@@ -19,7 +19,7 @@ class SLPKUtils:
                 z.extractall(output_dir)
 
             # 解压所有.gz文件（保留原始文件）
-            SLPKUtils.decompress_gz_files(output_dir)
+            # SLPKUtils.decompress_gz_files(output_dir)
 
             return True
         except Exception as e:
@@ -49,7 +49,7 @@ class SLPKUtils:
     @staticmethod
     def should_compress(path, root_dir):
         """判断文件是否需要压缩"""
-        # 根目录的3dSceneLayer.json不应压缩
+        # 根目录的3dSceneLayer.json压缩
         if os.path.basename(path) == "3dSceneLayer.json" and os.path.dirname(path) == root_dir:
             return True
 
@@ -72,11 +72,6 @@ class SLPKUtils:
     @staticmethod
     def compress_for_repack(source_dir):
         """为重新打包准备文件（压缩需要压缩的文件）"""
-        # 读取根目录的3dSceneLayer.json
-        scene_layer_path = os.path.join(source_dir, "3dSceneLayer.json")
-        if not os.path.exists(scene_layer_path):
-            raise FileNotFoundError("3dSceneLayer.json not found in root directory")
-
         # 处理所有文件
         for root, _, files in os.walk(source_dir):
             for file in files:

@@ -1,6 +1,7 @@
 import argparse
 import os.path
 import shutil
+import subprocess
 
 from SLPKProcessor import SLPKOptimizer
 from Tools.SLPKUtilTool import SLPKUtils
@@ -22,7 +23,7 @@ def optimize_slpk_nodes(slpk_path, output_path,
     dp_tolerance: 道格拉斯-普克算法容差
     """
     # 创建临时工作目录
-    temp_dir = os.path.abspath("JP3")
+    temp_dir = os.path.abspath("Temp")
     print(f"解压SLPK文件到临时目录: {temp_dir}")
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
@@ -41,8 +42,26 @@ def optimize_slpk_nodes(slpk_path, output_path,
     print("重新打包为SLPK...")
     if SLPKUtils.repack_slpk(temp_dir, output_path):
         shutil.rmtree(temp_dir)
+        print("重新打包完成！")
     else:
         print("重新打包失败!")
+
+    i3s_converter_path = r"i3s_converter.exe"
+    command = [i3s_converter_path, output_path]
+    try:
+        subprocess.run(
+            command,
+            check=True,  # 检查返回状态码
+            stdout=subprocess.PIPE,  # 捕获标准输出
+            stderr=subprocess.PIPE,  # 捕获错误输出
+            text=False  # 以文本形式返回结果
+        )
+        print("LOD细节层次转换成功！")
+    except subprocess.CalledProcessError as e:
+        print(f"LOD细节层次转换成功 (状态码 {e.returncode}):")
+        print("错误信息:", e.stderr)
+    except Exception as e:
+        print("发生意外错误:", str(e))
 
 
 # ====================== 主程序入口 ======================
