@@ -69,7 +69,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='I3S SLPK文件优化工具')
 
     # 位置参数（可选，带默认值）
-    parser.add_argument('input', type=str, nargs='?', default="JP3.slpk",
+    parser.add_argument('input', type=str, nargs='?', default="TestData1.slpk",
                         help='输入SLPK文件路径（默认: %(default)s）')
     parser.add_argument('output', type=str, nargs='?', default="output.slpk",
                         help='输出SLPK文件路径（默认: %(default)s）')

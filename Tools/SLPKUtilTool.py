@@ -79,7 +79,7 @@ class SLPKUtils:
 
                 # 忽略已压缩的文件
                 if file.endswith('.gz'):
-                    pass
+                    continue
 
                 # 判断是否需要压缩
                 if SLPKUtils.should_compress(file_path, source_dir):
@@ -95,19 +95,19 @@ class SLPKUtils:
 
     @staticmethod
     def repack_slpk(source_dir, output_path):
-        """重新打包为SLPK文件（修复版）"""
+        """重新打包为SLPK文件"""
         try:
             # 为重新打包准备文件
             SLPKUtils.compress_for_repack(source_dir)
 
             # 创建ZIP包 - 修改为仅存储模式 (ZIP_STORED)
-            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_STORED) as z:  # 关键修改
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_STORED, allowZip64=False) as z:
                 for root, _, files in os.walk(source_dir):
                     for file in files:
                         file_path = os.path.join(root, file)
 
                         # 计算在ZIP中的相对路径
-                        arcname = os.path.relpath(file_path, source_dir)
+                        arcname = os.path.relpath(file_path, source_dir).replace(os.sep, '/')
 
                         # 添加到ZIP
                         z.write(file_path, arcname)
