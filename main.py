@@ -15,12 +15,7 @@ def optimize_slpk_nodes(slpk_path, output_path,
     参数:
     slpk_path: 输入SLPK文件路径
     output_path: 输出优化后SLPK路径
-    min_points: 最小点数阈值（低于此值合并）
-    merge_distance: 节点合并距离阈值(米)
-    simplify_ratio: 几何简化比例(0-1)
-    texture_max_size: 纹理最大尺寸
-    lod_scale: LOD过渡缩放因子
-    dp_tolerance: 道格拉斯-普克算法容差
+    max_nodes: 最大节点数阈值
     """
     # 创建临时工作目录
     temp_dir = os.path.abspath("Temp")
@@ -69,7 +64,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='I3S SLPK文件优化工具')
 
     # 位置参数（可选，带默认值）
-    parser.add_argument('input', type=str, nargs='?', default="TestData1.slpk",
+    parser.add_argument('input', type=str, nargs='?', default="JP3.slpk",
                         help='输入SLPK文件路径（默认: %(default)s）')
     parser.add_argument('output', type=str, nargs='?', default="output.slpk",
                         help='输出SLPK文件路径（默认: %(default)s）')

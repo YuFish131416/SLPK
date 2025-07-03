@@ -5,7 +5,7 @@ import zipfile
 
 
 class SLPKUtils:
-    """SLPK文件处理工具类（修复版）"""
+    """SLPK文件处理工具类"""
 
     @staticmethod
     def extract_slpk(slpk_path, output_dir):
@@ -100,11 +100,11 @@ class SLPKUtils:
             # 为重新打包准备文件
             SLPKUtils.compress_for_repack(source_dir)
 
-            # 创建ZIP包 - 修改为仅存储模式 (ZIP_STORED)
-            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_STORED, allowZip64=False) as z:
+            # 创建ZIP包 - 仅存储模式 (ZIP_STORED)
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_STORED) as z:
                 for root, _, files in os.walk(source_dir):
                     for file in files:
-                        file_path = os.path.join(root, file)
+                        file_path = str(os.path.join(root, file))
 
                         # 计算在ZIP中的相对路径
                         arcname = os.path.relpath(file_path, source_dir).replace(os.sep, '/')
