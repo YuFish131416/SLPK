@@ -8,7 +8,7 @@ from Tools.SLPKUtilTool import SLPKUtils
 
 
 def optimize_slpk_nodes(slpk_path, output_path,
-                        max_nodes=4096):  # 添加道格拉斯-普克容差参数
+                        max_nodes=4096):
     """
     优化I3S SLPK节点结构 (符合1.8规范)
 
@@ -51,6 +51,19 @@ def optimize_slpk_nodes(slpk_path, output_path,
             stderr=subprocess.PIPE,  # 捕获错误输出
             text=False  # 以文本形式返回结果
         )
+        # 构造_v19.slpk文件路径
+        base_path = os.path.splitext(output_path)[0]  # 去掉扩展名的基础路径
+        v19_file = base_path + "_v19.slpk"
+        log_file = base_path + "_v19.log.json"
+
+        # 检查v19文件是否存在
+        if os.path.exists(v19_file):
+            shutil.move(v19_file, output_path)
+
+        # 检查log文件是否存在
+        if os.path.exists(log_file):
+            os.remove(log_file)
+
         print("LOD细节层次转换成功！")
     except subprocess.CalledProcessError as e:
         print(f"LOD细节层次转换成功 (状态码 {e.returncode}):")
@@ -83,5 +96,5 @@ if __name__ == "__main__":
     optimize_slpk_nodes(
         args.input,
         args.output,
-        max_nodes=args.max_nodes  # 添加容差参数
+        max_nodes=args.max_nodes
     )

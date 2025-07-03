@@ -116,7 +116,7 @@ class SLPKOptimizer(SLPKProcessor):
         # 构建节点索引映射
         # self.build_node_index_mapping()
 
-        # 提取节点ID（假设extract_node_id能处理路径）
+        # 提取节点ID
         root_node_id = self.extract_node_id(root_node_ref) if root_node_ref else None
 
         if not root_node_id:
