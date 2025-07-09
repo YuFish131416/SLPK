@@ -100,7 +100,7 @@ class SLPKProcessor:
 class SLPKOptimizer(SLPKProcessor):
     """SLPK文件优化器 - 基于LOD层级保留策略"""
 
-    def __init__(self, temp_dir, max_nodes=4096):
+    def __init__(self, temp_dir, max_nodes):
         super().__init__(temp_dir)
         self.parent_map = {}
         self.max_nodes = max_nodes  # 最大保留节点数
@@ -112,6 +112,16 @@ class SLPKOptimizer(SLPKProcessor):
         store_data = scene_layer_data.get("store", {})
         root_node_ref = store_data.get("rootNode")
         all_node_ids = self.get_node_ids()
+
+        total_nodes = len(all_node_ids)
+        min_nodes = max(1, round(0.02 * total_nodes))  # 至少保留1个节点
+        max_nodes = round(0.2 * total_nodes)
+
+        # 确保max_nodes在[min_nodes, max_nodes]区间内
+        if self.max_nodes < min_nodes:
+            self.max_nodes = min_nodes
+        elif self.max_nodes > max_nodes:
+            self.max_nodes = max_nodes
 
         # 构建节点索引映射
         # self.build_node_index_mapping()

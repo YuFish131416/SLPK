@@ -8,7 +8,7 @@ from Tools.SLPKUtilTool import SLPKUtils
 
 
 def optimize_slpk_nodes(slpk_path, output_path,
-                        max_nodes=4096):
+                        max_nodes):
     """
     优化I3S SLPK节点结构 (符合1.8规范)
 
@@ -27,10 +27,7 @@ def optimize_slpk_nodes(slpk_path, output_path,
         return
 
     # 创建优化器并执行优化
-    optimizer = SLPKOptimizer(
-        temp_dir,
-        max_nodes=max_nodes
-    )
+    optimizer = SLPKOptimizer(temp_dir, max_nodes)
     optimizer.optimize()
 
     # 重新打包为SLPK
@@ -93,8 +90,4 @@ if __name__ == "__main__":
     print(f"输出文件: {args.output}")
     print(f"参数: max_nodes={args.max_nodes}")
 
-    optimize_slpk_nodes(
-        args.input,
-        args.output,
-        max_nodes=args.max_nodes
-    )
+    optimize_slpk_nodes(args.input, args.output, args.max_nodes)
