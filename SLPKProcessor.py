@@ -146,7 +146,7 @@ class SLPKOptimizer(SLPKProcessor):
         print(f"保留的节点数: {len(nodes_to_keep)} 需要删除的节点数: {len(nodes_to_delete)}")
 
         # 按深度降序排序（深度大的先删除）
-        nodes_to_delete.sort(key=lambda nod_id: dep_map.get_depth_data(node_id), reverse=True)
+        nodes_to_delete.sort(key=lambda noid: dep_map.get_depth_data(noid), reverse=True)
 
         # 删除节点
         for node_id in nodes_to_delete:
