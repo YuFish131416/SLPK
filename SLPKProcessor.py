@@ -114,7 +114,7 @@ class SLPKOptimizer(SLPKProcessor):
         all_node_ids = self.get_node_ids()
 
         total_nodes = len(all_node_ids)
-        min_nodes = max(1, round(0.02 * total_nodes))  # 至少保留1个节点
+        min_nodes = max(1, round(0.05 * total_nodes))  # 至少保留1个节点
         max_nodes = round(0.2 * total_nodes)
 
         # 确保max_nodes在[min_nodes, max_nodes]区间内
