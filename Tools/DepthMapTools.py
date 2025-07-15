@@ -35,23 +35,52 @@ class DepthMap:
             self.depth_count[level] += 1
 
     def determine_max_retained_depth(self, max_nodes):
-        """确定最大保留深度"""
+        """确定最大保留深度（保留节点总数最接近阈值，可以超过）并打印各深度节点数"""
         cumulative_count = 0
         max_retained_depth = 0
-
-        # 按深度从小到大遍历
+        best_count = 0  # 最接近阈值的节点数
+        best_diff = float('inf')  # 当前最小差值
         depths = sorted(self.depth_count.keys())
+
+        # 打印表头
+        print("深度\t节点数\t累积节点数\t与阈值差值")
+
+        # 记录所有深度的信息用于后续打印
+        depth_info = []
+
+        # 遍历每个深度
         for depth in depths:
             count = self.depth_count[depth]
+            new_cumulative = cumulative_count + count
 
-            # 检查加上当前深度节点是否会超过限制
-            if cumulative_count + count > max_nodes:
-                # 当前深度加上后会超过限制，保留到上一深度
+            # 计算当前累积与阈值的差值
+            diff = abs(new_cumulative - max_nodes)
+
+            # 记录当前深度的信息
+            depth_info.append((depth, count, new_cumulative, diff))
+
+            # 检查是否更接近阈值
+            if diff < best_diff:
+                best_diff = diff
+                best_count = new_cumulative
+                max_retained_depth = depth
+
+            # 如果当前累积已超过阈值且差值开始增大，提前终止
+            if new_cumulative > max_nodes and diff > best_diff:
                 break
 
-            cumulative_count += count
-            max_retained_depth = depth
+            cumulative_count = new_cumulative
 
+        # 打印所有深度的信息
+        for d, count, cumul, diff in depth_info:
+            status = ""
+            if cumul == best_count:
+                status = " <-- 最接近"
+            print(f"{d}\t{count}\t{cumul}\t{abs(cumul - max_nodes)}{status}")
+
+        # 打印最终结果
+        print(f"\n最终保留深度: {max_retained_depth}")
+        print(f"保留节点总数: {best_count} (阈值: {max_nodes}, 差值: {best_count - max_nodes})")
         return max_retained_depth
 
     def get_depth_data(self, node_id):

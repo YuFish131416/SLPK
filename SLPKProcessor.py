@@ -100,10 +100,10 @@ class SLPKProcessor:
 class SLPKOptimizer(SLPKProcessor):
     """SLPK文件优化器 - 基于LOD层级保留策略"""
 
-    def __init__(self, temp_dir, max_nodes):
+    def __init__(self, temp_dir, threshold):
         super().__init__(temp_dir)
         self.parent_map = {}
-        self.max_nodes = max_nodes  # 最大保留节点数
+        self.threshold = threshold  # 最大保留节点数
 
     def optimize(self):
         """执行优化流程"""
@@ -114,14 +114,14 @@ class SLPKOptimizer(SLPKProcessor):
         all_node_ids = self.get_node_ids()
 
         total_nodes = len(all_node_ids)
-        min_nodes = max(1, round(0.05 * total_nodes))  # 至少保留1个节点
-        max_nodes = round(0.2 * total_nodes)
+        min_nodes = max(1, round(0.07 * total_nodes))  # 至少保留1个节点
+        max_nodes = round(0.4 * total_nodes)
 
         # 确保max_nodes在[min_nodes, max_nodes]区间内
-        if self.max_nodes < min_nodes:
-            self.max_nodes = min_nodes
-        elif self.max_nodes > max_nodes:
-            self.max_nodes = max_nodes
+        if self.threshold < min_nodes:
+            self.threshold = min_nodes
+        elif self.threshold > max_nodes:
+            self.threshold = max_nodes
 
         # 构建节点索引映射
         # self.build_node_index_mapping()
@@ -137,7 +137,7 @@ class SLPKOptimizer(SLPKProcessor):
         dep_map = DepthMap(self.nodes_dir, all_node_ids)
 
         # 确定最大保留深度
-        max_retained_depth = dep_map.determine_max_retained_depth(self.max_nodes)
+        max_retained_depth = dep_map.determine_max_retained_depth(self.threshold)
         print(f"最大保留深度: {max_retained_depth}")
 
         # 获取需要保留的节点（包括共享资源中引用的节点）
